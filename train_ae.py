@@ -5,6 +5,11 @@ import torch.utils.tensorboard
 from torch.nn.utils import clip_grad_norm_
 from tqdm.auto import tqdm
 
+import pickle
+import pandas as pd
+
+
+
 from utils.dataset import *
 from utils.misc import *
 from utils.data import *
@@ -29,8 +34,8 @@ parser.add_argument('--resume', type=str, default=None)
 parser.add_argument('--dataset_path', type=str, default='./data/shapenet.hdf5')
 parser.add_argument('--categories', type=str_list, default=['airplane'])
 parser.add_argument('--scale_mode', type=str, default='shape_unit')
-parser.add_argument('--train_batch_size', type=int, default=128)
-parser.add_argument('--val_batch_size', type=int, default=32)
+parser.add_argument('--train_batch_size', type=int, default=32)
+parser.add_argument('--val_batch_size', type=int, default=8)
 parser.add_argument('--rotate', type=eval, default=False, choices=[True, False])
 
 # Optimizer and scheduler
@@ -193,8 +198,19 @@ def validate_inspect(it):
 # Main loop
 logger.info('Start training...')
 try:
-    it = 1
-    while it <= args.max_iters:
+   favorite_color = pd.read_pickle("./PCData/20210917-155940.pickle")
+   #favorite_color = pickle.load( open( "./PCData/20210917-155940.pickle", "r" ) )
+   """
+   print(type(favorite_color))
+   print(len(favorite_color))
+   for x in favorite_color:
+   	print(x)
+   for x in favorite_color:
+       print(type(favorite_color[x]))
+   """
+   
+   it = 1
+   while it <= args.max_iters:
         train(it)
         if it % args.val_freq == 0 or it == args.max_iters:
             with torch.no_grad():
