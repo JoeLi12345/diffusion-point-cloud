@@ -4,6 +4,8 @@ from copy import copy
 import torch
 from torch.utils.data import Dataset
 import numpy as np
+import pickle
+import pandas as pd
 import h5py
 from tqdm.auto import tqdm
 
@@ -89,7 +91,7 @@ class ShapeNetCore(Dataset):
         return self.stats
 
     def load(self):
-
+        """
         def _enumerate_pointclouds(f):
             for synsetid in self.cate_synsetids:
                 cate_name = synsetid_to_cate[synsetid]
@@ -129,7 +131,59 @@ class ShapeNetCore(Dataset):
                     'shift': shift,
                     'scale': scale
                 })
+        """
+        directory = "PCData"
+        tot_pc = []
+        for filename in os.listdir(directory):
+            ff = os.path.join(directory, filename)
+            ins_pc = pd.read_pickle(ff)
+            for pc_key in ins_pc:
+                if (type(ins_pc[pc_key]) is list):
+                    for pc_array in ins_pc[pc_key]:
+                        tot_pc.append(pc_array)
+        pcsz = len(tot_pc)
+        train_pc = np.array(tot_pc)[:int(0.7*pcsz)]
+        val_pc = np.array(tot_pc)[int(0.7*pcsz):]
+        def _enumerate_pointclouds():
+            ind = 0
+            cate_name  = "hello"
+            for tmp_pc in tot_pc:
+                yield torch.from_numpy(tmp_pc), ind, cate_name
+                ind += 1
+                
+        for pc, pc_id, cate_name in _enumerate_pointclouds():
 
+            if self.scale_mode == 'global_unit':
+                shift = pc.mean(dim=0).reshape(1, 3)
+                scale = self.stats['std'].reshape(1, 1)
+            elif self.scale_mode == 'shape_unit':
+                shift = pc.mean(dim=0).reshape(1, 3)
+                scale = pc.flatten().std().reshape(1, 1)
+            elif self.scale_mode == 'shape_half':
+                shift = pc.mean(dim=0).reshape(1, 3)
+                scale = pc.flatten().std().reshape(1, 1) / (0.5)
+            elif self.scale_mode == 'shape_34':
+                shift = pc.mean(dim=0).reshape(1, 3)
+                scale = pc.flatten().std().reshape(1, 1) / (0.75)
+            elif self.scale_mode == 'shape_bbox':
+                pc_max, _ = pc.max(dim=0, keepdim=True) # (1, 3)
+                pc_min, _ = pc.min(dim=0, keepdim=True) # (1, 3)
+                shift = ((pc_min + pc_max) / 2).view(1, 3)
+                scale = (pc_max - pc_min).max().reshape(1, 1) / 2
+            else:
+                shift = torch.zeros([1, 3])
+                scale = torch.ones([1, 1])
+
+            pc = (pc - shift) / scale
+
+            self.pointclouds.append({
+                'pointcloud': pc,
+                'cate': cate_name,
+                'id': pc_id,
+                'shift': shift,
+                'scale': scale
+            })
+        
         # Deterministically shuffle the dataset
         self.pointclouds.sort(key=lambda data: data['id'], reverse=False)
         random.Random(2020).shuffle(self.pointclouds)
@@ -142,4 +196,3 @@ class ShapeNetCore(Dataset):
         if self.transform is not None:
             data = self.transform(data)
         return data
-
